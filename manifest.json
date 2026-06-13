@@ -1,0 +1,14 @@
+{
+  "name": "Боевая инициатива",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "author": "Absolutnolegalnobolshoespasibo",
+  "description": "Трекер инициативы для боя.",
+  "action": {
+    "title": "Инициатива",
+    "icon": "icon.svg",
+    "popover": "index.html",
+    "height": 640,
+    "width": 380
+  }
+}
