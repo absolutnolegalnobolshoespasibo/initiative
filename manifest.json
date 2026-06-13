@@ -6,8 +6,8 @@
   "description": "Трекер инициативы для боя.",
   "action": {
     "title": "Инициатива",
-    "icon": "icon.svg",
-    "popover": "index.html",
+    "icon": "/icon.svg",
+    "popover": "/",
     "height": 640,
     "width": 380
   }
