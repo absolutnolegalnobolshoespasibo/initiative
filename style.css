@@ -1,0 +1,469 @@
+:root {
+  color-scheme: dark;
+
+  --bg: #14161c;
+  --surface: #1c1f29;
+  --surface-2: #242838;
+  --border: #2f3344;
+
+  --text: #e9e7e2;
+  --text-muted: #8b8d9a;
+
+  --accent: #e0a458;
+  --accent-soft: rgba(224, 164, 88, 0.16);
+  --accent-strong: #f2c386;
+
+  --ready: #5fb381;
+  --ready-soft: rgba(95, 179, 129, 0.16);
+
+  --npc: #c1666b;
+  --npc-soft: rgba(193, 102, 107, 0.16);
+
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, "Segoe UI", "Inter", Roboto, Helvetica, Arial,
+    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- Header ---------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px 10px;
+  flex: none;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title .die {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.badge-round {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.badge-battle {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.timer-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px 10px;
+  flex: none;
+}
+
+.timer {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--accent-strong);
+}
+
+.timer-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+/* ---------- List ---------- */
+
+.list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.list::-webkit-scrollbar-thumb {
+  background: var(--surface-2);
+  border-radius: 999px;
+}
+
+.group-header {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 10px 6px 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  position: relative;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.avatar-placeholder {
+  display: block;
+}
+
+.name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.order-num {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- Idle phase controls ---------- */
+
+.init-input {
+  width: 56px;
+  flex: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  padding: 6px 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.init-input:disabled {
+  opacity: 0.45;
+}
+
+.init-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tag-toggle {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tag-toggle.is-pc {
+  color: var(--ready);
+  border-color: var(--ready);
+  background: var(--ready-soft);
+}
+
+.tag-toggle.is-npc {
+  color: var(--npc);
+  border-color: var(--npc);
+  background: var(--npc-soft);
+}
+
+.tag-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------- Round phase controls ---------- */
+
+.current-init {
+  flex: none;
+  min-width: 34px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.row.is-ready .current-init {
+  color: var(--accent-strong);
+}
+
+/* Значение инициативы до нажатия готовности — чуть приглушённое */
+.current-init.muted-init {
+  opacity: 0.45;
+}
+
+/* Бейдж "+N" рядом с инициативой */
+.bonus-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: var(--ready);
+  margin-left: 3px;
+  vertical-align: super;
+  line-height: 1;
+}
+
+/* Анимация появления бейджа при нажатии готовности.
+   Намеренно НЕ используем opacity:0 в стартовом кадре:
+   если DOM пересоздаётся из-за onMetadataChange (~50-200 мс),
+   анимация перезапускается, но бейдж остаётся видимым (нет вспышки). */
+.bonus-badge.is-new {
+  animation: bonus-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+@keyframes bonus-pop {
+  0%   { transform: scale(0.55) translateY(-5px); }
+  55%  { transform: scale(1.3) translateY(-1px); }
+  100% { transform: scale(1) translateY(0); }
+}
+
+.ready-check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--ready);
+  cursor: pointer;
+}
+
+.ready-check:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.row.is-ready {
+  border-color: var(--ready);
+  background: var(--ready-soft);
+}
+
+/* ---------- Battle phase ---------- */
+
+.row.is-current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.row.is-current .order-num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1206;
+}
+
+.row.is-current::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  bottom: -1px;
+  width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .row.is-current {
+    animation: pulse-glow 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px var(--accent) inset, 0 0 0 0 var(--accent-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 1px var(--accent) inset, 0 0 14px 1px var(--accent-soft);
+  }
+}
+
+/* ---------- Status / hints ---------- */
+
+.hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 0 16px 10px;
+  flex: none;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 28px 20px;
+}
+
+.status-line {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 16px 0;
+  flex: none;
+}
+
+.status-line.is-ready {
+  color: var(--ready);
+  font-weight: 600;
+}
+
+/* ---------- Footer ---------- */
+
+.footer {
+  flex: none;
+  padding: 10px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.primary-btn {
+  appearance: none;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #241804;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+
+.primary-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.primary-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.primary-btn:disabled {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.primary-btn:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.gm-note {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.text-btn {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: color 0.15s ease;
+}
+
+.text-btn:hover {
+  color: var(--npc);
+  text-decoration-color: var(--npc);
+}
+
+.text-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
