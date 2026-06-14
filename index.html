@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Боевая инициатива</title>
+    <link rel="stylesheet" href="style.css" />
+    <script>
+      // Глобальный перехватчик ошибок — показывает текст вместо
+      // вечной «Загрузка…», если что-то пойдёт не так.
+      window.addEventListener("error", function (e) {
+        var app = document.getElementById("app");
+        if (app) {
+          app.innerHTML =
+            '<div class="empty" style="color:#c1666b;white-space:pre-wrap;font-size:12px">'
+            + "Ошибка загрузки расширения:\n"
+            + (e.message || String(e))
+            + (e.filename ? "\n" + e.filename + ":" + e.lineno : "")
+            + "</div>";
+        }
+      });
+      window.addEventListener("unhandledrejection", function (e) {
+        var app = document.getElementById("app");
+        if (app) {
+          app.innerHTML =
+            '<div class="empty" style="color:#c1666b;white-space:pre-wrap;font-size:12px">'
+            + "Ошибка (Promise):\n"
+            + (e.reason ? (e.reason.message || String(e.reason)) : "неизвестная ошибка")
+            + "</div>";
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <div class="empty">Загрузка…</div>
+    </div>
+    <!-- main.bundle.js содержит SDK и всю логику в одном файле,
+         без внешних зависимостей и CDN-запросов. -->
+    <script type="module" src="main.bundle.js"></script>
+  </body>
+</html>
