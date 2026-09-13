@@ -3389,8 +3389,7 @@ var BroadcastApi = class {
 var BroadcastApi_default = BroadcastApi;
 
 // node_modules/js-base64/base64.mjs
-var _hasBuffer = typeof Buffer === "function";
-var _TD = typeof TextDecoder === "function" ? new TextDecoder() : void 0;
+var _TD = typeof TextDecoder === "function" ? new TextDecoder("utf-8", { ignoreBOM: true }) : void 0;
 var _TE = typeof TextEncoder === "function" ? new TextEncoder() : void 0;
 var b64ch = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 var b64chs = Array.prototype.slice.call(b64ch);
@@ -3403,6 +3402,26 @@ var b64re = /^(?:[A-Za-z\d+\/]{4})*?(?:[A-Za-z\d+\/]{2}(?:==)?|[A-Za-z\d+\/]{3}=
 var _fromCC = String.fromCharCode.bind(String);
 var _U8Afrom = typeof Uint8Array.from === "function" ? Uint8Array.from.bind(Uint8Array) : (it) => new Uint8Array(Array.prototype.slice.call(it, 0));
 var _tidyB64 = (s) => s.replace(/[^A-Za-z0-9\+\/]/g, "");
+var btoaPolyfill = (bin) => {
+  let u32, c0, c1, c2, asc = "";
+  const pad = bin.length % 3;
+  for (let i = 0; i < bin.length; ) {
+    if ((c0 = bin.charCodeAt(i++)) > 255 || (c1 = bin.charCodeAt(i++)) > 255 || (c2 = bin.charCodeAt(i++)) > 255)
+      throw new TypeError("invalid character found");
+    u32 = c0 << 16 | c1 << 8 | c2;
+    asc += b64chs[u32 >> 18 & 63] + b64chs[u32 >> 12 & 63] + b64chs[u32 >> 6 & 63] + b64chs[u32 & 63];
+  }
+  return pad ? asc.slice(0, pad - 3) + "===".substring(pad) : asc;
+};
+var _btoa = typeof btoa === "function" ? (bin) => btoa(bin) : btoaPolyfill;
+var _fromUint8Array = typeof Uint8Array.prototype.toBase64 === "function" ? (u8a) => u8a.toBase64() : (u8a) => {
+  const maxargs = 4096;
+  let strs = [];
+  for (let i = 0, l = u8a.length; i < l; i += maxargs) {
+    strs.push(_fromCC.apply(null, u8a.subarray(i, i + maxargs)));
+  }
+  return _btoa(strs.join(""));
+};
 var re_btou = /[\xC0-\xDF][\x80-\xBF]|[\xE0-\xEF][\x80-\xBF]{2}|[\xF0-\xF7][\x80-\xBF]{3}/g;
 var cb_btou = (cccc) => {
   switch (cccc.length) {
@@ -3435,9 +3454,9 @@ var atobPolyfill = (asc) => {
   }
   return binArray.join("");
 };
-var _atob = typeof atob === "function" ? (asc) => atob(_tidyB64(asc)) : _hasBuffer ? (asc) => Buffer.from(asc, "base64").toString("binary") : atobPolyfill;
-var _toUint8Array = _hasBuffer ? (a) => _U8Afrom(Buffer.from(a, "base64")) : (a) => _U8Afrom(_atob(a).split("").map((c) => c.charCodeAt(0)));
-var _decode = _hasBuffer ? (a) => Buffer.from(a, "base64").toString("utf8") : _TD ? (a) => _TD.decode(_toUint8Array(a)) : (a) => btou(_atob(a));
+var _atob = typeof atob === "function" ? (asc) => atob(_tidyB64(asc)) : atobPolyfill;
+var _toUint8Array = typeof Uint8Array.fromBase64 === "function" ? (a) => Uint8Array.fromBase64(a) : (a) => _U8Afrom(_atob(a).split("").map((c) => c.charCodeAt(0)));
+var _decode = _TD ? (a) => _TD.decode(_toUint8Array(a)) : (a) => btou(_atob(a));
 var _unURI = (a) => _tidyB64(a.replace(/[-_]/g, (m0) => m0 == "-" ? "+" : "/"));
 var decode = (src) => _decode(_unURI(src));
 
@@ -3518,7 +3537,7 @@ var OBR = {
 };
 var lib_default = OBR;
 
-// src/logic.js
+// logic.js
 var ROUND_BONUS = 10;
 var DECAY_INTERVAL_MS = 3e4;
 function createDefaultState() {
@@ -3550,26 +3569,19 @@ function getCharData(item, roleMap2, itemKey) {
     playerEditable
   };
 }
-function computeInitiative(item, state2, roleMap2, itemKey, now) {
-  const data = getCharData(item, roleMap2, itemKey);
-  const base = data.initialInitiative;
-  const participant = state2.participants[item.id];
-  if (participant && participant.ready && participant.readyAt != null) {
-    const readyAt = Number(participant.readyAt);
-    const roundStartedAt = state2.roundStartedAt != null ? Number(state2.roundStartedAt) : readyAt;
-    const elapsed = Math.max(0, readyAt - roundStartedAt);
-    const bonus = Math.max(0, ROUND_BONUS - Math.floor(elapsed / DECAY_INTERVAL_MS));
-    return base + bonus;
-  }
-  return base;
-}
 function computeBonus(item, state2) {
   const participant = state2.participants[item.id];
-  if (!participant || !participant.ready || participant.readyAt == null) return 0;
+  if (!participant || !participant.ready || participant.readyAt == null) {
+    return 0;
+  }
   const readyAt = Number(participant.readyAt);
   const roundStartedAt = state2.roundStartedAt != null ? Number(state2.roundStartedAt) : readyAt;
   const elapsed = Math.max(0, readyAt - roundStartedAt);
   return Math.max(0, ROUND_BONUS - Math.floor(elapsed / DECAY_INTERVAL_MS));
+}
+function computeInitiative(item, state2, roleMap2, itemKey, now) {
+  const data = getCharData(item, roleMap2, itemKey);
+  return data.initialInitiative + computeBonus(item, state2);
 }
 function startRoundParticipants(characters2) {
   const participants = {};
@@ -3624,20 +3636,80 @@ function splitByEditable(characters2, roleMap2, itemKey) {
   return { npc, pc };
 }
 
-// src/main.js
+// main.js
 var ID = "rodeo.kostya.initiative-tracker";
 var ROOM_KEY = `${ID}/state`;
 var ITEM_KEY = `${ID}/data`;
+var BATTLE_SOUND_URL = "battebeginsound.mp3";
+var BATTLE_SOUND_VOLUME = 1;
+var BONUS_ANIMATION_MS = 700;
 var app = document.getElementById("app");
 var role = "PLAYER";
 var roleMap = /* @__PURE__ */ new Map();
 var characters = [];
 var sceneReady = false;
-var tickHandle = null;
-var pendingAnimation = /* @__PURE__ */ new Set();
+var pendingAnimation = /* @__PURE__ */ new Map();
+var lastHtml = null;
+var lastSoundRoundStartedAt = null;
 var state = createDefaultState();
 function isGM() {
   return role === "GM";
+}
+var battleSound = new Audio(BATTLE_SOUND_URL);
+battleSound.preload = "auto";
+battleSound.volume = BATTLE_SOUND_VOLUME;
+var audioUnlocked = false;
+var soundRequested = false;
+function unlockAudio() {
+  if (audioUnlocked || soundRequested) return;
+  try {
+    battleSound.muted = true;
+    const played = battleSound.play();
+    if (played && typeof played.then === "function") {
+      played.then(
+        () => {
+          audioUnlocked = true;
+          if (!soundRequested) {
+            battleSound.pause();
+            battleSound.currentTime = 0;
+          }
+          battleSound.muted = false;
+          document.removeEventListener("pointerdown", unlockAudio);
+        },
+        () => {
+          battleSound.muted = false;
+        }
+      );
+    } else {
+      audioUnlocked = true;
+      battleSound.pause();
+      battleSound.currentTime = 0;
+      battleSound.muted = false;
+    }
+  } catch (e) {
+    battleSound.muted = false;
+  }
+}
+document.addEventListener("pointerdown", unlockAudio);
+function playBattleSound() {
+  try {
+    soundRequested = true;
+    battleSound.muted = false;
+    battleSound.currentTime = 0;
+    const played = battleSound.play();
+    if (played && typeof played.catch === "function") {
+      played.catch(() => {
+      });
+    }
+  } catch (e) {
+    console.warn("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0438\u0433\u0440\u0430\u0442\u044C \u0437\u0432\u0443\u043A \u043D\u0430\u0447\u0430\u043B\u0430 \u0440\u0430\u0443\u043D\u0434\u0430", e);
+  }
+}
+function maybePlayRoundSound(next) {
+  if (!next || next.phase !== "round" || !next.roundStartedAt) return;
+  if (next.roundStartedAt === lastSoundRoundStartedAt) return;
+  lastSoundRoundStartedAt = next.roundStartedAt;
+  playBattleSound();
 }
 async function resolveRole() {
   if (typeof lib_default.player.role === "string") {
@@ -3694,12 +3766,14 @@ async function saveState(next) {
 }
 async function startRound() {
   if (!isGM() || characters.length === 0) return;
-  await saveState({
+  const next = {
     ...createDefaultState(),
     phase: "round",
     roundStartedAt: Date.now(),
     participants: startRoundParticipants(characters)
-  });
+  };
+  maybePlayRoundSound(next);
+  await saveState(next);
 }
 async function toggleReady(itemId) {
   if (state.phase !== "round") return;
@@ -3707,7 +3781,9 @@ async function toggleReady(itemId) {
   if (!item) return;
   const data = getCharData(item, roleMap, ITEM_KEY);
   if (!isGM() && !data.playerEditable) return;
-  if (!state.participants[itemId]?.ready) pendingAnimation.add(itemId);
+  if (!state.participants[itemId]?.ready) {
+    pendingAnimation.set(itemId, Date.now() + BONUS_ANIMATION_MS);
+  }
   const participants = toggleReadyParticipants(state, itemId, Date.now());
   await saveState({ ...state, participants });
 }
@@ -3793,16 +3869,11 @@ async function setPlayerEditable(itemId, value) {
     console.error("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u043F\u0435\u0440\u0441\u043E\u043D\u0430\u0436\u0430", e);
   }
 }
-function render() {
+function buildHtml() {
   if (!sceneReady) {
-    app.innerHTML = `<div class="empty">\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0441\u0446\u0435\u043D\u0443 \u0432 Owlbear Rodeo,<br />\u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C \u0442\u0440\u0435\u043A\u0435\u0440 \u0438\u043D\u0438\u0446\u0438\u0430\u0442\u0438\u0432\u044B.</div>`;
-    manageTicking();
-    return;
+    return `<div class="empty">\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0441\u0446\u0435\u043D\u0443 \u0432 Owlbear Rodeo,<br />\u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C \u0442\u0440\u0435\u043A\u0435\u0440 \u0438\u043D\u0438\u0446\u0438\u0430\u0442\u0438\u0432\u044B.</div>`;
   }
   let html = renderHeader();
-  if (state.phase === "round") {
-    html += renderTimerRow();
-  }
   if (state.phase === "idle") {
     html += renderIdle();
   } else if (state.phase === "round") {
@@ -3810,10 +3881,70 @@ function render() {
   } else if (state.phase === "battle") {
     html += renderBattle();
   }
+  return html;
+}
+function captureUiState() {
+  const list = app.querySelector(".list");
+  const active = document.activeElement;
+  let focus = null;
+  if (active && app.contains(active) && active.dataset && active.dataset.action) {
+    let start = null;
+    let end = null;
+    try {
+      start = active.selectionStart;
+      end = active.selectionEnd;
+    } catch (e) {
+    }
+    focus = {
+      action: active.dataset.action,
+      id: active.dataset.id || "",
+      start,
+      end
+    };
+  }
+  return { scrollTop: list ? list.scrollTop : 0, focus };
+}
+function restoreUiState(saved) {
+  const list = app.querySelector(".list");
+  if (list && saved.scrollTop) {
+    list.scrollTop = saved.scrollTop;
+  }
+  if (!saved.focus) return;
+  const idPart = saved.focus.id ? `[data-id="${cssEscape(saved.focus.id)}"]` : "";
+  const el = app.querySelector(
+    `[data-action="${cssEscape(saved.focus.action)}"]${idPart}`
+  );
+  if (!el) return;
+  el.focus();
+  if (saved.focus.start != null && typeof el.setSelectionRange === "function") {
+    try {
+      el.setSelectionRange(saved.focus.start, saved.focus.end);
+    } catch (e) {
+    }
+  }
+}
+function cssEscape(value) {
+  const str = String(value == null ? "" : value);
+  if (window.CSS && typeof window.CSS.escape === "function") {
+    return window.CSS.escape(str);
+  }
+  return str.replace(/["\\]/g, "\\$&");
+}
+function render() {
+  const html = buildHtml();
+  if (html === lastHtml) return;
+  const ui = captureUiState();
   app.innerHTML = html;
+  lastHtml = html;
+  restoreUiState(ui);
   attachHandlers();
-  manageTicking();
-  pendingAnimation.clear();
+  cleanupAnimations();
+}
+function cleanupAnimations() {
+  const now = Date.now();
+  for (const [id, until] of pendingAnimation) {
+    if (until <= now) pendingAnimation.delete(id);
+  }
 }
 function renderHeader() {
   let label = "\u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u043A\u0430";
@@ -3835,21 +3966,6 @@ function renderHeader() {
         \u0418\u043D\u0438\u0446\u0438\u0430\u0442\u0438\u0432\u0430
       </div>
       <div class="badge ${badgeClass}">${label}</div>
-    </div>
-  `;
-}
-function renderTimerRow() {
-  if (!state.roundStartedAt) return "";
-  const elapsedSec = Math.max(
-    0,
-    Math.floor((Date.now() - state.roundStartedAt) / 1e3)
-  );
-  const m = Math.floor(elapsedSec / 60).toString().padStart(2, "0");
-  const s = (elapsedSec % 60).toString().padStart(2, "0");
-  return `
-    <div class="timer-row">
-      <span class="timer">${m}:${s}</span>
-      <span class="timer-label">\u0441 \u043D\u0430\u0447\u0430\u043B\u0430 \u0440\u0430\u0443\u043D\u0434\u0430</span>
     </div>
   `;
 }
@@ -3942,10 +4058,9 @@ function renderReadyRow(item) {
   const canToggle = isGM() || data.playerEditable;
   const participant = state.participants[item.id];
   const ready = !!(participant && participant.ready);
-  const now = Date.now();
-  const total = computeInitiative(item, state, roleMap, ITEM_KEY, now);
+  const total = computeInitiative(item, state, roleMap, ITEM_KEY, Date.now());
   const bonus = ready ? computeBonus(item, state) : 0;
-  const isNewlyReady = pendingAnimation.has(item.id);
+  const isNewlyReady = (pendingAnimation.get(item.id) || 0) > Date.now();
   const bonusBadge = ready && bonus > 0 ? `<span class="bonus-badge${isNewlyReady ? " is-new" : ""}">+${bonus}</span>` : "";
   return `
     <div class="row ${ready ? "is-ready" : ""}">
@@ -4010,15 +4125,6 @@ function escapeHtml(value) {
 function escapeAttr(value) {
   return (value == null ? "" : String(value)).replace(/"/g, "&quot;");
 }
-function manageTicking() {
-  const shouldTick = state.phase === "round";
-  if (shouldTick && !tickHandle) {
-    tickHandle = setInterval(render, 1e3);
-  } else if (!shouldTick && tickHandle) {
-    clearInterval(tickHandle);
-    tickHandle = null;
-  }
-}
 function attachHandlers() {
   app.onclick = (event) => {
     const target = event.target.closest("[data-action]");
@@ -4078,10 +4184,13 @@ async function init() {
   });
   lib_default.room.getMetadata().then((metadata) => {
     state = metadata[ROOM_KEY] || createDefaultState();
+    lastSoundRoundStartedAt = state.roundStartedAt ?? null;
     render();
   });
   lib_default.room.onMetadataChange((metadata) => {
-    state = metadata[ROOM_KEY] || createDefaultState();
+    const next = metadata[ROOM_KEY] || createDefaultState();
+    state = next;
+    maybePlayRoundSound(next);
     render();
   });
   lib_default.scene.onReadyChange((ready) => {
