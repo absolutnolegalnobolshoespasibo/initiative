@@ -6,10 +6,11 @@
 //  интерфейса/интеграции (main.js).
 // ============================================================================
 
-// Сколько прибавляется к "изначальной инициативе" при старте раунда.
+// Максимальный бонус, который персонаж получает за готовность,
+// если нажал её сразу после старта раунда.
 export const ROUND_BONUS = 10;
 
-// За сколько миллисекунд готовности инициатива падает на 1.
+// За сколько миллисекунд ожидания бонус уменьшается на 1.
 export const DECAY_INTERVAL_MS = 30_000;
 
 // Состояние "до начала раунда" / "после окончания боя".
@@ -48,19 +49,29 @@ export function getCharData(item, roleMap, itemKey) {
   };
 }
 
-// Текущее значение инициативы персонажа с учётом угасания во время
-// готовности (-1 за каждые DECAY_INTERVAL_MS миллисекунд).
+// Бонус за готовность: +ROUND_BONUS, если нажал сразу, и на 1 меньше
+// за каждые DECAY_INTERVAL_MS миллисекунд промедления после старта
+// раунда. Ниже нуля не опускается. Пока готовность не нажата — 0.
+export function computeBonus(item, state) {
+  const participant = state.participants[item.id];
+  if (!participant || !participant.ready || participant.readyAt == null) {
+    return 0;
+  }
+  const readyAt = Number(participant.readyAt);
+  const roundStartedAt =
+    state.roundStartedAt != null ? Number(state.roundStartedAt) : readyAt;
+  const elapsed = Math.max(0, readyAt - roundStartedAt);
+  return Math.max(0, ROUND_BONUS - Math.floor(elapsed / DECAY_INTERVAL_MS));
+}
+
+// Текущее значение инициативы персонажа: изначальная инициатива плюс
+// бонус за готовность (см. computeBonus).
+//
+// Параметр `now` больше не влияет на результат (бонус фиксируется в
+// момент нажатия готовности), но оставлен ради совместимости вызовов.
 export function computeInitiative(item, state, roleMap, itemKey, now) {
   const data = getCharData(item, roleMap, itemKey);
-  const base = data.initialInitiative + ROUND_BONUS;
-
-  const participant = state.participants[item.id];
-  if (participant && participant.ready && typeof participant.readyAt === "number") {
-    const elapsed = Math.max(0, now - participant.readyAt);
-    const decay = Math.floor(elapsed / DECAY_INTERVAL_MS);
-    return base - decay;
-  }
-  return base;
+  return data.initialInitiative + computeBonus(item, state);
 }
 
 // Участники нового раунда: все текущие персонажи, никто не готов.
@@ -79,8 +90,8 @@ export function toggleReadyParticipants(state, itemId, now) {
   const current = participants[itemId] || { ready: false, readyAt: null };
 
   participants[itemId] = current.ready
-    ? { ready: false, readyAt: null } // снять галочку -> вернуть инициативу
-    : { ready: true, readyAt: now }; // поставить галочку -> запустить угасание
+    ? { ready: false, readyAt: null } // снять галочку -> убрать бонус
+    : { ready: true, readyAt: now }; // поставить галочку -> зафиксировать бонус
 
   return participants;
 }
