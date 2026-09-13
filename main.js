@@ -7,12 +7,12 @@
 //  если хочешь разобраться в правилах боя, начни оттуда.
 // ============================================================================
 
-import OBR from "https://esm.sh/@owlbear-rodeo/sdk@3.1.0";
+import OBR from "@owlbear-rodeo/sdk";
 import {
-  ROUND_BONUS,
   createDefaultState,
   getCharData,
   computeInitiative,
+  computeBonus,
   startRoundParticipants,
   toggleReadyParticipants,
   allReady,
@@ -38,6 +38,15 @@ const ROOM_KEY = `${ID}/state`;
 // инициатива, доступность для игроков) хранятся в метаданных ТОКЕНА.
 const ITEM_KEY = `${ID}/data`;
 
+// Звук начала раунда. Файл лежит рядом с index.html.
+const BATTLE_SOUND_URL = "battebeginsound.mp3";
+
+// Громкость звука: от 0 (тихо) до 1 (полная).
+const BATTLE_SOUND_VOLUME = 1;
+
+// Сколько миллисекунд держится анимация появления бейджа "+N".
+const BONUS_ANIMATION_MS = 700;
+
 // ----------------------------------------------------------------------------
 //  Состояние приложения (хранится в памяти этой вкладки)
 // ----------------------------------------------------------------------------
@@ -48,7 +57,12 @@ let role = "PLAYER"; // роль текущего игрока: "GM" | "PLAYER"
 let roleMap = new Map(); // userId -> "GM" | "PLAYER" (все подключённые)
 let characters = []; // токены слоя CHARACTER, в порядке создания
 let sceneReady = false; // открыта ли сцена прямо сейчас
-let tickHandle = null; // setInterval для живого обновления таймера
+let pendingAnimation = new Map(); // itemId -> до какого момента играть анимацию
+let lastHtml = null; // последняя отрисованная разметка (чтобы не трогать DOM зря)
+
+// Для какого раунда звук уже проигран — защита от повторного
+// воспроизведения (мастер получает эхо собственного изменения метаданных).
+let lastSoundRoundStartedAt = null;
 
 // Состояние раунда/боя — хранится в метаданных комнаты и одинаково
 // у всех подключённых клиентов.
@@ -56,6 +70,81 @@ let state = createDefaultState();
 
 function isGM() {
   return role === "GM";
+}
+
+// ----------------------------------------------------------------------------
+//  Звук начала раунда
+// ----------------------------------------------------------------------------
+
+const battleSound = new Audio(BATTLE_SOUND_URL);
+battleSound.preload = "auto";
+battleSound.volume = BATTLE_SOUND_VOLUME;
+
+let audioUnlocked = false; // разрешил ли браузер звук в этой вкладке
+let soundRequested = false; // просили ли уже проиграть звук "по-настоящему"
+
+// Браузеры не дают проигрывать звук, пока пользователь не
+// повзаимодействовал со страницей. Поэтому при первом же клике внутри
+// попапа один раз "прокручиваем" звук беззвучно — после этого браузер
+// разрешает воспроизведение, и игрок услышит начало следующего раунда.
+function unlockAudio() {
+  if (audioUnlocked || soundRequested) return;
+  try {
+    battleSound.muted = true;
+    const played = battleSound.play();
+    if (played && typeof played.then === "function") {
+      played.then(
+        () => {
+          audioUnlocked = true;
+          if (!soundRequested) {
+            battleSound.pause();
+            battleSound.currentTime = 0;
+          }
+          battleSound.muted = false;
+          document.removeEventListener("pointerdown", unlockAudio);
+        },
+        () => {
+          // Не получилось — попробуем при следующем клике.
+          battleSound.muted = false;
+        }
+      );
+    } else {
+      audioUnlocked = true;
+      battleSound.pause();
+      battleSound.currentTime = 0;
+      battleSound.muted = false;
+    }
+  } catch (e) {
+    battleSound.muted = false;
+  }
+}
+
+document.addEventListener("pointerdown", unlockAudio);
+
+function playBattleSound() {
+  try {
+    soundRequested = true;
+    battleSound.muted = false;
+    battleSound.currentTime = 0;
+    const played = battleSound.play();
+    if (played && typeof played.catch === "function") {
+      // Браузер всё ещё может запретить автовоспроизведение у игрока,
+      // который ни разу не кликал внутри попапа — это не ошибка,
+      // просто звук не прозвучит.
+      played.catch(() => {});
+    }
+  } catch (e) {
+    console.warn("Не удалось проиграть звук начала раунда", e);
+  }
+}
+
+// Проиграть звук, если это действительно НОВЫЙ раунд (а не повторное
+// применение того же состояния и не открытие попапа посреди раунда).
+function maybePlayRoundSound(next) {
+  if (!next || next.phase !== "round" || !next.roundStartedAt) return;
+  if (next.roundStartedAt === lastSoundRoundStartedAt) return;
+  lastSoundRoundStartedAt = next.roundStartedAt;
+  playBattleSound();
 }
 
 // ----------------------------------------------------------------------------
@@ -132,12 +221,18 @@ async function saveState(next) {
 async function startRound() {
   if (!isGM() || characters.length === 0) return;
 
-  await saveState({
+  const next = {
     ...createDefaultState(),
     phase: "round",
     roundStartedAt: Date.now(),
     participants: startRoundParticipants(characters),
-  });
+  };
+
+  // Важно: звук запускается синхронно, прямо в обработчике клика —
+  // так браузер точно считает его "разрешённым пользователем".
+  maybePlayRoundSound(next);
+
+  await saveState(next);
 }
 
 // 3) Переключить галочку готовности персонажа.
@@ -149,6 +244,10 @@ async function toggleReady(itemId) {
 
   const data = getCharData(item, roleMap, ITEM_KEY);
   if (!isGM() && !data.playerEditable) return; // нет прав на этого персонажа
+
+  if (!state.participants[itemId]?.ready) {
+    pendingAnimation.set(itemId, Date.now() + BONUS_ANIMATION_MS);
+  }
 
   const participants = toggleReadyParticipants(state, itemId, Date.now());
   await saveState({ ...state, participants });
@@ -203,13 +302,24 @@ async function resetTracker() {
   await saveState(createDefaultState());
 }
 
-// Подвинуть камеру так, чтобы персонаж оказался в центре экрана.
+// Подвинуть камеру так, чтобы персонаж оказался в центре экрана,
+// не меняя текущий масштаб.
 async function centerOn(itemId) {
   try {
-    const bounds = await OBR.scene.items.getItemBounds([itemId]);
-    if (bounds) {
-      await OBR.viewport.animateToBounds(bounds);
-    }
+    const [bounds, scale, width, height] = await Promise.all([
+      OBR.scene.items.getItemBounds([itemId]),
+      OBR.viewport.getScale(),
+      OBR.viewport.getWidth(),
+      OBR.viewport.getHeight(),
+    ]);
+    if (!bounds || !bounds.center) return;
+    await OBR.viewport.animateTo({
+      scale,
+      position: {
+        x: width / 2 - bounds.center.x * scale,
+        y: height / 2 - bounds.center.y * scale,
+      },
+    });
   } catch (e) {
     console.error("Не удалось сфокусировать камеру на персонаже", e);
   }
@@ -250,18 +360,13 @@ async function setPlayerEditable(itemId, value) {
 //  Отрисовка интерфейса
 // ----------------------------------------------------------------------------
 
-function render() {
+// Собирает разметку целиком, ничего не меняя в DOM.
+function buildHtml() {
   if (!sceneReady) {
-    app.innerHTML = `<div class="empty">Откройте сцену в Owlbear Rodeo,<br />чтобы увидеть трекер инициативы.</div>`;
-    manageTicking();
-    return;
+    return `<div class="empty">Откройте сцену в Owlbear Rodeo,<br />чтобы увидеть трекер инициативы.</div>`;
   }
 
   let html = renderHeader();
-
-  if (state.phase === "round" || state.phase === "battle") {
-    html += renderTimerRow();
-  }
 
   if (state.phase === "idle") {
     html += renderIdle();
@@ -271,9 +376,90 @@ function render() {
     html += renderBattle();
   }
 
+  return html;
+}
+
+// Запоминаем то, что теряется при замене innerHTML: позицию прокрутки
+// списка и фокус в поле ввода.
+function captureUiState() {
+  const list = app.querySelector(".list");
+  const active = document.activeElement;
+
+  let focus = null;
+  if (active && app.contains(active) && active.dataset && active.dataset.action) {
+    let start = null;
+    let end = null;
+    try {
+      start = active.selectionStart;
+      end = active.selectionEnd;
+    } catch (e) {
+      // У некоторых типов полей (например number) выделение недоступно.
+    }
+    focus = {
+      action: active.dataset.action,
+      id: active.dataset.id || "",
+      start,
+      end,
+    };
+  }
+
+  return { scrollTop: list ? list.scrollTop : 0, focus };
+}
+
+function restoreUiState(saved) {
+  const list = app.querySelector(".list");
+  if (list && saved.scrollTop) {
+    list.scrollTop = saved.scrollTop;
+  }
+
+  if (!saved.focus) return;
+
+  const idPart = saved.focus.id ? `[data-id="${cssEscape(saved.focus.id)}"]` : "";
+  const el = app.querySelector(
+    `[data-action="${cssEscape(saved.focus.action)}"]${idPart}`
+  );
+  if (!el) return;
+
+  el.focus();
+  if (saved.focus.start != null && typeof el.setSelectionRange === "function") {
+    try {
+      el.setSelectionRange(saved.focus.start, saved.focus.end);
+    } catch (e) {
+      // Тоже нормально: не все поля поддерживают выделение.
+    }
+  }
+}
+
+function cssEscape(value) {
+  const str = String(value == null ? "" : value);
+  if (window.CSS && typeof window.CSS.escape === "function") {
+    return window.CSS.escape(str);
+  }
+  return str.replace(/["\\]/g, "\\$&");
+}
+
+// Перерисовка. Если разметка не изменилась — DOM не трогаем вообще,
+// иначе список каждый раз «прыгал» бы наверх.
+function render() {
+  const html = buildHtml();
+  if (html === lastHtml) return;
+
+  const ui = captureUiState();
+
   app.innerHTML = html;
+  lastHtml = html;
+
+  restoreUiState(ui);
   attachHandlers();
-  manageTicking();
+  cleanupAnimations();
+}
+
+// Убираем из очереди анимации то, что уже отыграло.
+function cleanupAnimations() {
+  const now = Date.now();
+  for (const [id, until] of pendingAnimation) {
+    if (until <= now) pendingAnimation.delete(id);
+  }
 }
 
 function renderHeader() {
@@ -297,25 +483,6 @@ function renderHeader() {
         Инициатива
       </div>
       <div class="badge ${badgeClass}">${label}</div>
-    </div>
-  `;
-}
-
-function renderTimerRow() {
-  if (!state.roundStartedAt) return "";
-  const elapsedSec = Math.max(
-    0,
-    Math.floor((Date.now() - state.roundStartedAt) / 1000)
-  );
-  const m = Math.floor(elapsedSec / 60)
-    .toString()
-    .padStart(2, "0");
-  const s = (elapsedSec % 60).toString().padStart(2, "0");
-
-  return `
-    <div class="timer-row">
-      <span class="timer">${m}:${s}</span>
-      <span class="timer-label">с начала раунда</span>
     </div>
   `;
 }
@@ -375,11 +542,6 @@ function renderIdle() {
     .join("");
 
   return `
-    <div class="hint">
-      Изначальная инициатива — стартовый модификатор персонажа
-      (например, бонус Ловкости). В начале раунда к нему прибавляется
-      +${ROUND_BONUS}.
-    </div>
     <div class="list">${rows}</div>
     ${renderFooterIdle()}
   `;
@@ -452,7 +614,13 @@ function renderReadyRow(item) {
   const canToggle = isGM() || data.playerEditable;
   const participant = state.participants[item.id];
   const ready = !!(participant && participant.ready);
-  const current = computeInitiative(item, state, roleMap, ITEM_KEY, Date.now());
+  const total = computeInitiative(item, state, roleMap, ITEM_KEY, Date.now());
+  const bonus = ready ? computeBonus(item, state) : 0;
+  const isNewlyReady = (pendingAnimation.get(item.id) || 0) > Date.now();
+  const bonusBadge =
+    ready && bonus > 0
+      ? `<span class="bonus-badge${isNewlyReady ? " is-new" : ""}">+${bonus}</span>`
+      : "";
 
   return `
     <div class="row ${ready ? "is-ready" : ""}">
@@ -460,7 +628,7 @@ function renderReadyRow(item) {
       <div class="name" title="${escapeAttr(item.name)}">${escapeHtml(
     item.name
   )}</div>
-      <div class="current-init">${current}</div>
+      <div class="current-init${ready ? "" : " muted-init"}">${total}${bonusBadge}</div>
       <input
         type="checkbox"
         class="ready-check"
@@ -541,18 +709,6 @@ function escapeHtml(value) {
 
 function escapeAttr(value) {
   return (value == null ? "" : String(value)).replace(/"/g, "&quot;");
-}
-
-// Каждую секунду перерисовываем интерфейс, если на экране есть
-// что-то, меняющееся со временем (таймер, угасание инициативы).
-function manageTicking() {
-  const shouldTick = state.phase === "round" || state.phase === "battle";
-  if (shouldTick && !tickHandle) {
-    tickHandle = setInterval(render, 1000);
-  } else if (!shouldTick && tickHandle) {
-    clearInterval(tickHandle);
-    tickHandle = null;
-  }
 }
 
 // ----------------------------------------------------------------------------
@@ -638,10 +794,17 @@ async function init() {
   // Состояние боя хранится в метаданных комнаты и общее для всех.
   OBR.room.getMetadata().then((metadata) => {
     state = metadata[ROOM_KEY] || createDefaultState();
+    // Раунд, который уже идёт к моменту открытия попапа, звуком
+    // не сопровождаем.
+    lastSoundRoundStartedAt = state.roundStartedAt ?? null;
     render();
   });
+
   OBR.room.onMetadataChange((metadata) => {
-    state = metadata[ROOM_KEY] || createDefaultState();
+    const next = metadata[ROOM_KEY] || createDefaultState();
+    state = next;
+    // Звук слышат все, у кого открыт попап расширения.
+    maybePlayRoundSound(next);
     render();
   });
 
